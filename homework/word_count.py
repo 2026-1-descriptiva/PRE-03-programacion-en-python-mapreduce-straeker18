@@ -2,21 +2,15 @@
 
 # pylint: disable=broad-exception-raised
 
-import fileinput
 import glob
-import os.path
+import os
 import string
 import time
-
-# El experimento consiste en aplicar el algoritmo de word count de hadoop
-# a un conjunto de archivos en texto plano, midiendo el tiempo de ejecución.
-# El conjunto de archivos se genera replicando n veces un conjunto de archivos
-# de ejemplo que se encuentran en la carpeta files/raw.
 
 
 def clear_folder(folder):
     if os.path.exists(folder):
-        for file in glob.glob(f"{folder}*"):
+        for file in glob.glob(os.path.join(folder, "*")):
             os.remove(file)
 
 
@@ -35,6 +29,9 @@ def delete_folder(folder):
 
 def generate_file_copies(n):
 
+    # IMPORTANTE: limpiar carpeta input antes de generar copias
+    initialize_folder("files/input/")
+
     for file in glob.glob("files/raw/*"):
         with open(file, "r", encoding="utf-8") as f:
             text = f.read()
@@ -45,11 +42,11 @@ def generate_file_copies(n):
                 raw_filename_with_extension
             )[0]
             new_filename = f"{raw_filename_without_extension}_{i}.txt"
+
             with open(f"files/input/{new_filename}", "w", encoding="utf-8") as f2:
                 f2.write(text)
 
 
-# Mapea las líneas a pares (palabra, 1). Este es el mapper.
 def mapper(sequence):
     pairs_sequence = []
     for _, line in sequence:
@@ -61,7 +58,6 @@ def mapper(sequence):
     return pairs_sequence
 
 
-# Reduce la secuencia de pares sumando los valores por cada palabra. Este es el reducer.
 def reducer(pairs_sequence):
     result = []
     for key, value in pairs_sequence:
@@ -76,15 +72,15 @@ def hadoop(input_folder, output_folder, mapper_fn, reducer_fn):
 
     def read_records_from_input(input_folder):
         sequence = []
-        files = glob.glob(f"{input_folder}*")
+        files = glob.glob(os.path.join(input_folder, "*"))
         for file in files:
             with open(file, "r", encoding="utf-8") as f:
                 for line in f:
                     sequence.append((file, line))
         return sequence
 
-    def save_results_to_output(result):
-        with open("files/output/part-00000", "w", encoding="utf-8") as f:
+    def save_results_to_output(result, output_folder):
+        with open(os.path.join(output_folder, "part-00000"), "w", encoding="utf-8") as f:
             for key, value in result:
                 f.write(f"{key}\t{value}\n")
 
@@ -102,8 +98,9 @@ def hadoop(input_folder, output_folder, mapper_fn, reducer_fn):
     pairs_sequence = mapper_fn(sequence)
     pairs_sequence = sorted(pairs_sequence)
     result = reducer_fn(pairs_sequence)
+
     create_output_directory(output_folder)
-    save_results_to_output(result)
+    save_results_to_output(result, output_folder)
     create_success_file(output_folder)
 
 
@@ -111,7 +108,8 @@ if __name__ == "__main__":
 
     initialize_folder("files/input/")
     delete_folder("files/output/")
-    generate_file_copies(1000)
+    generate_file_copies(5000)
+
     start_time = time.time()
 
     hadoop(
